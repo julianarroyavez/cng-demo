@@ -14,4 +14,8 @@ services:
     networks:
       - queue-network  #TODO: use labels
 
+networks:
+  queue-network:
+    external: true
+
 
