@@ -1,0 +1,9 @@
+services:
+  backend:
+    container_name: backend
+    environment:
+      APP_ENV: prod
+    ports:
+      - "8080:8080"
+    volumes:
+      - ~/application/log/:/var/log/application/

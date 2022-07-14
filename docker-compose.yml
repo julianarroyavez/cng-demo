@@ -1,0 +1,17 @@
+version: "3.9"
+services:
+  backend:
+    container_name: cng-backend-dev
+    image: hygge-ev-backend:v0.1Cng
+    build: .
+    environment:
+      APP_ENV: dev
+    ports:
+      - "8002:8080"
+    volumes:
+      - ~/application-dev/log/:/var/log/application/
+    restart: always
+    networks:
+      - queue-network  #TODO: use labels
+
+

@@ -1,0 +1,13 @@
+--get all service rates of specific station
+select sm.record_id, sm.name, sm.type, srt.record_id, srt.description,
+srt.consumption_from, srt.consumption_to, srt.consumption_unit,
+srt.rate, srt.rate_unit From service_rates sr
+inner join station_services ss
+on ss.service_master_record_id = sr.service_master_record_id and ss.validity_start <= now() and ss.validity_end > now()
+inner join service_masters sm
+on sm.record_id = sr.service_master_record_id and sm.validity_start <= now() and sm.validity_end > now()
+inner join service_rate_table srt
+on srt.record_id = sr.consumption_rate_record_id and srt.validity_start <= now() and srt.validity_end > now()
+where ss.station_record_id = '799ae0cc88e444749a9452fe640f24de'
+and sr.validity_start <= now() and sr.validity_end > now()
+order by sm.service_rank

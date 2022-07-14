@@ -1,0 +1,2 @@
+# waitress==2.0.0 #for windows dev
+# flake8==3.9.0 # for dev
