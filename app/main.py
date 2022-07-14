@@ -127,7 +127,6 @@ class App(falcon.API):
         # Slots
         # Invoices, Bookings
         # ServiceMasters, ServiceRateTable, ServiceRates, StationServices
-        # ServiceMasters, ServiceRateTable, ServiceRates, StationServices
         # TokenConversionRates, Orders, OrderItems,
         # Payments,
         # AppConfigs, Verifications
@@ -143,12 +142,3 @@ class App(falcon.API):
 # db_session.close()
 middlewares = [AuthorizationMiddleware(), MultipartMiddleware(), JsonParser(), RequestLogging(), DbSessionManager()]
 application = App(middleware=middlewares)
-
-if __name__ == '__main__':
-    import os
-    import waitress
-
-    waitress.serve(application, host=os.getenv('MYAPI_WSGI_HOST', '192.168.31.6'),
-                       port=os.getenv('MYAPI_WSGI_PORT', '8000'))
-
-    from wsgiref.simple_server import make_server
