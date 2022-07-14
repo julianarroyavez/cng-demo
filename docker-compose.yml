@@ -1,8 +1,8 @@
 version: "3.9"
 services:
   backend:
-    container_name: cng-backend-dev
-    image: hygge-ev-backend:v0.1Cng
+    container_name: backend-dev
+    image: hygge-ev-backend:v1
     build: .
     environment:
       APP_ENV: dev
@@ -14,8 +14,33 @@ services:
     networks:
       - queue-network  #TODO: use labels
 
+  gateway:
+    container_name: gateway
+    image: hygge-ev-gateway:2.7
+    build:
+      context: .
+      dockerfile: gateway.Dockerfile
+    volumes:
+      - /etc/ssl/:/etc/ssl/
+      - ~/hygge-ev-static-content/:/opt/static-content/
+    restart: always
+    network_mode: host
+
+  queue:
+    container_name: queue
+    image: hygge-ev-queue:1.2
+    build:
+      context: .
+      dockerfile: queue.Dockerfile
+    ports:
+      - "8161:8161"
+      - "1883:1883"
+      - "61616:61616"
+      - "61613:61613"
+    restart: always
+    networks:
+      - queue-network
+
 networks:
   queue-network:
     external: true
-
-
