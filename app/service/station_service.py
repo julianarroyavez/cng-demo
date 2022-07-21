@@ -431,7 +431,7 @@ class StationService:
 
     @staticmethod
     def get_slot_count_for_station(station_id, slot_date=None):
-        ist_time = datetime.datetime.now(timezone('UTC')).astimezone(timezone('Asia/Kolkata')) # todo from station
+        ist_time = datetime.datetime.now(timezone('UTC')).astimezone(timezone('Asia/Kolkata'))  # todo from station
         query_time = str(ist_time.strftime(time_format_in_hh_mm_ss))
         current_date = str(ist_time.date())
         if slot_date is not None and current_date != slot_date:
@@ -445,14 +445,14 @@ class StationService:
 
         query_date = slot_date if slot_date is not None else current_date
         booking_cursor = db_session.execute_sql(
-            slot_constant.booking_count_by_total_duration_hourly % (
+            slot_constant.booking_count_for_available_slots % (
                 station_id,
                 query_date,
                 query_time))
 
         slot = slot_cursor.fetchone()
 
-        booking_count = booking_cursor.fetchone()
+        booking_count = booking_cursor.fetchone()[0]
 
         total_slots = slot[0] * 2  # todo I am multiply by 2 cause in this first cng release slots are 30 min.
         available_slots = slot[1] * 2
@@ -461,8 +461,8 @@ class StationService:
         if total_slots == available_slots:
             unavailable_slots = 0
         else:
-            unavailable_slots = total_slots - (available_slots + (float(booking_count[0]) * 0.5))
-
+            # unavailable_slots = total_slots - (available_slots + (float(booking_count[0])))
+            unavailable_slots = total_slots - (available_slots - booking_count)
         if available_slots < 0:
             available_slots = 0
         LOG.info(f'{total_slots}, {available_slots}, {unavailable_slots}')

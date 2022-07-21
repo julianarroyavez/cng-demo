@@ -19,7 +19,7 @@ slot_count_for_station = 'select floor(extract(hours from sum(sod.operation_end_
 booking_count_for_available_slots = 'select count(1) from transactional.bookings b ' \
                                     'inner join transactional.slots s on s.id = b.slot_id ' \
                                     'where b.station_record_id = \'%s\'  ' \
-                                    'and b.service_date = now()::date ' \
+                                    'and b.service_date = (\'%s\'::date) ' \
                                     'and s.start_time >= (\'%s\'::interval) ' \
                                     'and b.booking_status in (\'BOOKED\',\'COMPLETED\', \'FULFILLED\');'
 
