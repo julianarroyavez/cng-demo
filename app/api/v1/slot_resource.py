@@ -10,7 +10,6 @@ from app.domain.auth_schema import Resources, PermissionScopes, Authorization
 
 
 class Collection(BaseResource):
-
     class QueryParams(enum.Enum):
         Date = 'date'
         StationId = 'station'
@@ -34,4 +33,7 @@ class Collection(BaseResource):
 
             self.on_success(res=res, status_code=falcon.HTTP_OK, body=body)
         except Exception as error:
-            self.on_error(res, error if isinstance(error, AppError) else UnknownError(description='failed to get nearby stations', raw_exception=error))
+            self.on_error(res,
+                          error if isinstance(error, AppError) else UnknownError(
+                              description='failed to get nearby stations',
+                              raw_exception=error))

@@ -9,7 +9,6 @@ from app.service.rating.ratings_service import RatingsService
 from app.service.station_service import StationService
 from app.domain.auth_schema import Resources, PermissionScopes, Authorization
 
-
 LOG = log.get_logger()
 rating_upload_failed = 'Failed to Update Ratings. Please try again later.'
 rating_failed = 'Failed to fetch Reviews for this station. Please try again later.'
@@ -23,13 +22,17 @@ class Collection(BaseResource):
         if 'nearby' in params:
             try:
                 service = StationService()
-                params['charging-type'] = 'CNG'
+                # params['charging-type'] = 'CNG'  # todo cng_delete
                 body = service.get_nearby_stations(params=params)
 
                 self.on_success(res, status_code=falcon.HTTP_200, body=body)
             except Exception as e:
-                self.on_error(res, e if isinstance(e, AppError) else UnknownError(description='failed to get nearby stations',
-                                                                                  raw_exception=e))
+                self.on_error(res,
+                              e if isinstance(
+                                  e,
+                                  AppError) else UnknownError(
+                                  description='failed to get nearby stations',
+                                  raw_exception=e))
 
     @falcon.before(authorize, [Authorization(Resources.Stations, [PermissionScopes.Retrieve, PermissionScopes.Create])])
     def on_post(self, req, res):
@@ -42,7 +45,8 @@ class Collection(BaseResource):
                                              req_auth_claims=req.context['auth_claims'])
             self.on_success(res, status_code=falcon.HTTP_200, body=body)
         except Exception as e:
-            self.on_error(res, e if isinstance(e, AppError) else UnknownError(description='failed to register station', raw_exception=e))
+            self.on_error(res, e if isinstance(e, AppError) else UnknownError(description='failed to register station',
+                                                                              raw_exception=e))
 
 
 class ItemImage(BaseResource):
@@ -51,15 +55,16 @@ class ItemImage(BaseResource):
     def on_get(self, req, res, station_id, image_id):
         try:
             service = StationService()
-            body = service.get_station_image(station_id=station_id, image_id=image_id, size=req.params.get('size', None))
+            body = service.get_station_image(station_id=station_id, image_id=image_id,
+                                             size=req.params.get('size', None))
 
             self.on_image_success(res=res, body=body)
         except Exception as e:
-            self.on_error(res, e if isinstance(e, AppError) else UnknownError(description='failed to get Image', raw_exception=e))
+            self.on_error(res, e if isinstance(e, AppError) else UnknownError(description='failed to get Image',
+                                                                              raw_exception=e))
 
 
 class RatingCollection(BaseResource):
-
     class QueryParams(enum.Enum):
         limit = 'limit'
         offset = 'offset'

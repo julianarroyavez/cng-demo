@@ -6,7 +6,7 @@ from app.domain.resource_schema import Nozzles, Chargers
 class NozzlesRepository:
     def fetch_all_by_station_power_and_connector_type(self, now, station_id, vehicle, rated_power_id):
         return (Nozzles
-                .select(Nozzles.record_id)
+                .select(Nozzles.record_id, Nozzles.vehicle_per_nozzle)
                 .join_from(Nozzles, Chargers,
                            on=((Nozzles.charger_record == Chargers.record_id)
                                & (Chargers.validity_start <= now)

@@ -210,6 +210,7 @@ class Nozzles(TemporalBaseModel):
     rated_power_record = ForeignKeyField(RatedPowers, column_name='rated_power_record_id', lazy_load=False)
     asset_id = CharField(max_length=100, null=True)
     serial_id = CharField(null=True)
+    vehicle_per_nozzle = IntegerField()
 
     class Meta:
         schema = schema_constant.transactional

@@ -1,8 +1,6 @@
 import datetime
 import enum
-import random
 import uuid
-
 from app import config
 from app.database import db_session
 from app.domain.booking_schema import Bookings, ServiceMasters, Slots, CancellationRefundDuration, BookingStatus
@@ -24,8 +22,7 @@ from app.service.slot_service import SlotService
 from app.service.transaction_service import TransactionService
 from app.util import string_util
 from app.util.datetime_util import datetime_now, to_date, to_time, to_12_hour_format_with_meridian, \
-    to_12_hour_format_without_meridian, to_day_of_week_in_binary, after_now, minutes_after_now, time_to_mins, \
-    date_and_time_to_datetime, date_format
+    to_12_hour_format_without_meridian, to_day_of_week_in_binary, date_and_time_to_datetime, date_format
 from app.util.datetime_util import get_rem_time_from_now, get_time_delta_in_minutes, before_given_time
 from app.util.mqtt_publisher import send_booking_details, send_booking_details_for_temp
 from app.util.notification_factory import NotificationFactory
@@ -258,7 +255,6 @@ class BookingService:
                     simulator = True
 
                 if simulator:
-
                     result = self.send_booking_popup_to_topic(
                         booking_id=response['bookingId'],
                         hygge_box_number=station.hygge_box_number,
@@ -473,14 +469,14 @@ class BookingService:
             slot.status = 'DISCARDED'
             slots_repository.update(slot)
 
-            optiona_data = {
+            optional_data = {
                 "booking_station_name": booking_details.stations.name
             }
 
         notification = notification_factory.create_and_queue_notification(data=booking_id, user_id=user_id, device=None,
                                                                           device_token=device_token,
                                                                           trigger='Booking_cancellation',
-                                                                          optional_data=optiona_data)
+                                                                          optional_data=optional_data)
 
         notification_service.insert_notification(notifications=notification['notifications'],
                                                  to_device=notification['to_device'])
@@ -685,10 +681,10 @@ class BookingService:
             }
 
             if is_scheduled:
-
-                booking["scheduledTime"] = date_format(date_and_time_to_datetime(date_value=booking_from_db.service_date,
-                                                                     time_value=booking_from_db.slots.end_time,
-                                                                     date_format='%Y-%m-%d %H:%M:%S'))
+                booking["scheduledTime"] = date_format(
+                    date_and_time_to_datetime(date_value=booking_from_db.service_date,
+                                              time_value=booking_from_db.slots.end_time,
+                                              date_format='%Y-%m-%d %H:%M:%S'))
                 booking["isScheduled"] = True
 
             LOG.info('******************************************************************************************')

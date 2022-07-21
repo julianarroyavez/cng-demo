@@ -2,7 +2,7 @@ import datetime
 import math
 
 from app.domain.resource_schema import Vehicles, VehicleMasters, StationOperationDetails, StationOperationBreakDetails
-from app.errors import UnknownError
+from app.errors import UnknownError, ErrorMessages
 from app.log import LOG
 from app.repository.app_configs_repository import AppConfigRepository
 from app.repository.nozzles_repository import NozzlesRepository
@@ -19,7 +19,7 @@ slot_time_format_string = "{} - {}"
 class SlotService:
 
     def generate_slots(self, station_id, vehicle_id, date, user_id, rated_power_id):
-        rated_power_id = 3  # todo for cng testing
+        # rated_power_id = '3'  # todo cng_delete
         station_operation_details_repository = StationOperationDetailsRepository()
         app_config_repository = AppConfigRepository()
         station_operation_break_details_repository = StationOperationBreakRepository()
@@ -49,14 +49,16 @@ class SlotService:
             rated_power_id=rated_power_id
         )
 
+        nozzle_list = list(nozzles_of_station_for_connector_type)
+
         nozzle_slot_map = self.get_nozzles_slot_for_booked_slots(
-            nozzles_of_station_for_connector_type=nozzles_of_station_for_connector_type,
+            nozzles_of_station_for_connector_type=nozzle_list,
             station_operation_window=station_operation_window,
             date=date, durations=durations, station_id=station_id, now=now
         )
-        # return
+
         LOG.info('After booked slot check: {}'.format(nozzle_slot_map))
-        total_no_of_nozzles = nozzles_of_station_for_connector_type.count()
+        total_no_of_nozzles = sum(n.vehicle_per_nozzle for n in nozzle_list)
 
         nozzle_slot_map = self.get_nozzles_slot_for_passed_slots(
             nozzle_slot_map=nozzle_slot_map,
@@ -69,6 +71,15 @@ class SlotService:
 
         slots_as_windows = []
 
+        try:
+            slot_breaks = station_operation_break_details_repository.fetch_all_by_station_id(
+                station_id=station_id,
+                now=now,
+                now_in_datetime=to_date(
+                    date))
+        except StationOperationBreakDetails.DoesNotExist as e:
+            LOG.info('No breaks found for station with id {} with exception {}', station_id, e)
+
         for duration in durations:
             nozzle_slot_map[duration] = nozzle_slot_map.get(duration, {})
 
@@ -79,8 +90,9 @@ class SlotService:
                     math.floor((end_hour_time - station_operation_window.start) / duration)
             ):
                 LOG.info("inside duration_slot loop with total no of nozzles: %s" % int(total_no_of_nozzles))
-                nozzle_slot_map[duration][duration_slot] = nozzle_slot_map[duration].get(duration_slot, 0) + \
-                                                           int(total_no_of_nozzles)
+                nozzle_slot_map[duration][duration_slot] = \
+                    nozzle_slot_map[duration].get(duration_slot, 0) + \
+                    int(total_no_of_nozzles)
 
                 if running_window_slot_count != nozzle_slot_map[duration][duration_slot]:
                     if running_window_slot_count == -1:
@@ -93,7 +105,8 @@ class SlotService:
 
                         slots_as_windows = self.get_if_running_window_changes(slots_as_windows,
                                                                               running_window_slot_count, duration_slot,
-                                                                              duration, nozzle_slot_map, slots)
+                                                                              duration, nozzle_slot_map, slots,
+                                                                              total_no_of_nozzles)
                         slots = []
                         running_window_slot_count = nozzle_slot_map[duration][duration_slot]
 
@@ -117,25 +130,18 @@ class SlotService:
                 except Exception:
                     end_time = min_to_time(0)
 
-                try:
-                    slot_breaks = station_operation_break_details_repository.fetch_all_by_station_id(
-                        station_id=station_id,
-                        now=now,
-                        now_in_datetime=to_date(
-                            date))
-                except StationOperationBreakDetails.DoesNotExist as e:
-                    LOG.info('No breaks found for station with id {} with exception {}', station_id, e)
-
                 if not slot_breaks:
-                    self.append_available_slots(slots, start_time, end_time)
+                    self.append_available_slots(slots, start_time, end_time,
+                                                nozzle_slot_map[duration][duration_slot])
                 else:
                     for slot_break in slot_breaks:
                         if not slot_break.break_start_time <= start_time < slot_break.break_end_time and \
                                 not slot_break.break_start_time < end_time <= slot_break.break_end_time:
-                            self.append_available_slots(slots, start_time, end_time)
+                            self.append_available_slots(slots, start_time, end_time,
+                                                        nozzle_slot_map[duration][duration_slot])
 
             slots_as_windows = self.handle_end_scenario(slots, running_window_slot_count, duration, nozzle_slot_map,
-                                                        slots_as_windows, duration_slot)
+                                                        slots_as_windows, duration_slot, total_no_of_nozzles)
 
         return slots_as_windows
 
@@ -145,8 +151,22 @@ class SlotService:
         start_time = to_time(booking_req['slot']['startTime'])
         end_time = to_time(booking_req['slot']['endTime'])
 
-        return slots_repository.insert(user_id=user.record_id, nozzle=nozzle, date=to_date(booking_req['serviceDate']),
-                                       start_time=start_time, end_time=end_time, status='BOOKED')
+        date = to_date(booking_req['serviceDate'])
+        slots = slots_repository.get_slot_by_nozzle_and_slot_time(date=date, nozzle=nozzle, start_time=start_time,
+                                                                  end_time=end_time)
+
+        if any(slots):
+            slot = slots.get()
+            if slot.vacancy <= 0:
+                raise UnknownError(description='This slot is not available',
+                                   message=ErrorMessages.SlotUnavailable.value)
+            slot.vacancy = slot.vacancy - 1
+            slots_repository.update(slot)
+            return slot
+
+        return slots_repository.insert(user_id=user.record_id, nozzle=nozzle, date=date,
+                                       start_time=start_time, end_time=end_time, status='BOOKED',
+                                       vacancy=nozzle.vehicle_per_nozzle - 1)
 
     def get_nozzles_of_station_for_connector_type(self, vehicle_id, now, station_id, rated_power_id):
         vehicles_repository = VehiclesRepository()
@@ -166,15 +186,18 @@ class SlotService:
                                           station_operation_window, station_id, now):
 
         slots_repository = SlotsRepository()
-
+        nozzles_ids = list(n.record_id for n in nozzles_of_station_for_connector_type)
         booked_slots = slots_repository.fetch_all_by_nozzle_list(date=to_date(date), status='BOOKED',
-                                                                 nozzle_list_of_station_for_connector_type=nozzles_of_station_for_connector_type)
+                                                                 nozzle_list_of_station_for_connector_type=nozzles_ids)
 
-        total_no_of_nozzles = nozzles_of_station_for_connector_type.count()
+        total_of_vacancies = sum(n.vehicle_per_nozzle for n in nozzles_of_station_for_connector_type)
 
-        LOG.info('total_no_of_nozzles: {}'.format(int(total_no_of_nozzles)))
+        # total_of_vacancies = sum(n.vehicle_per_nozzle for n in nozzles_of_station_for_connector_type)
+
+        LOG.info('total_no_of_nozzles: {}'.format(total_of_vacancies))
         nozzle_slot_map = {}
-        for slot in booked_slots:
+        booked_slots_list = list(booked_slots)
+        for slot in booked_slots_list:
             LOG.info(type(slot.start_time))
 
             LOG.info('found slot {} - {}'.format(slot.start_time, slot.end_time))
@@ -182,19 +205,24 @@ class SlotService:
             slot_range = self.create_slot_range(start_time=slot.start_time, start_win=station_operation_window.start)
             LOG.info('***********************^^^^ %s %s' % (slot_range, station_operation_window.start))
 
-            booked_slots_count = slots_repository.fetch_all_by_nozzle_list_and_slot_time(
-                date=to_date(date),
-                status='BOOKED',
-                nozzle_list_of_station_for_connector_type=nozzles_of_station_for_connector_type,
-                start_time=slot.start_time,  # slot_range['start_time'], #
-                end_time=slot.end_time  # slot_range['end_time'], #
-            )
+            booked_slots = list(
+                {'nozzle': s.nozzle,
+                 'start_time': s.start_time,
+                 'end_time': s.end_time,
+                 'vacancy': s.vacancy,
+                 'status': 'BOOKED'}
+                for s in booked_slots_list
+                if s.status == 'BOOKED'
+                and s.start_time == slot.start_time and s.end_time == slot.end_time and s.date == slot.date)
+            # Slots.nozzle, Slots.start_time, Slots.end_time, Slots.vacancy
+
+            booked_slots_count = total_of_vacancies - sum(b['vacancy'] for b in booked_slots)
 
             for duration in durations:
 
-                LOG.info('slots {} - {}'.format(booked_slots_count, total_no_of_nozzles))
+                LOG.info('slots {} - {}'.format(booked_slots_count, total_of_vacancies))
 
-                if booked_slots_count == total_no_of_nozzles:
+                if booked_slots_count == total_of_vacancies:
                     slot_range = math.ceil((time_to_mins(slot.end_time) - station_operation_window.start) / duration)
                 else:
                     slot_range = math.floor((time_to_mins(slot.end_time) - station_operation_window.start) / duration)
@@ -206,7 +234,8 @@ class SlotService:
                         math.floor((time_to_mins(slot.start_time) - station_operation_window.start) / duration),
                         slot_range
                 ):
-                    nozzle_slot_map[duration][booked_duration] = nozzle_slot_map[duration].get(booked_duration, 0) - 1
+                    nozzle_slot_map[duration][booked_duration] = nozzle_slot_map[duration].get(booked_duration,
+                                                                                               0) - booked_slots_count
         LOG.info('After booked slot check: {}'.format(nozzle_slot_map))
         return nozzle_slot_map
 
@@ -228,7 +257,7 @@ class SlotService:
         return nozzle_slot_map
 
     def handle_end_scenario(self, slots, running_window_slot_count, duration, nozzle_slot_map, slots_as_windows,
-                            duration_slot):
+                            duration_slot, quota):
 
         window_start = to_time(slots[0]['startTime'])
         window_end = to_time(slots[-1]['endTime'])
@@ -241,10 +270,11 @@ class SlotService:
                 to_12_hour_format_with_meridian(time=window_end)),
             "status": "AVAILABLE" if running_window_slot_count > 0 else "UNAVAILABLE",
             "durations": [{
-                "name": "{} Mins".format(duration) if duration < 60 else "{} Hour".format(
+                "name": "{} min".format(duration) if duration < 60 else "{} Hour".format(
                     int(duration / 60)),
                 "value": duration,
                 "unit": "MINUTE",
+                "quota": quota,
                 "slots": slots
             }]
         })
@@ -252,7 +282,7 @@ class SlotService:
         return slots_as_windows
 
     def get_if_running_window_changes(self, slots_as_windows, running_window_slot_count, duration_slot, duration,
-                                      nozzle_slot_map, slots):
+                                      nozzle_slot_map, slots, quota):
 
         window_start = to_time(slots[0]['startTime'])
         window_end = to_time(slots[-1]['endTime'])
@@ -266,24 +296,26 @@ class SlotService:
                 to_12_hour_format_with_meridian(time=window_end)),
             "status": "AVAILABLE" if running_window_slot_count > 0 else "UNAVAILABLE",
             "durations": [{
-                "name": "{} Mins".format(duration) if duration < 60 else "{} Hour".format(
+                "name": "{} min".format(duration) if duration < 60 else "{} Hour".format(
                     int(duration / 60)),
                 "value": duration,
                 "unit": "MINUTE",
+                "quota": quota,
                 "slots": slots
             }]
         })
         LOG.info("window added now clear the things")
         return slots_as_windows
 
-    def append_available_slots(self, slots, start_time, end_time):
+    def append_available_slots(self, slots, start_time, end_time, vacancy):
         LOG.info("for {} and {}".format(start_time, end_time))
         slots.append({
             "name": "{} - {}".format(
                 to_12_hour_format_without_meridian(time=start_time),
                 to_12_hour_format_with_meridian(time=end_time)),
             "startTime": start_time.isoformat(),
-            "endTime": end_time.isoformat()
+            "endTime": end_time.isoformat(),
+            "vacancy": vacancy
         })
 
     def generate_available_and_unavailable_slots_for_stations(self, station_id):
@@ -319,7 +351,8 @@ class SlotService:
             date=now, durations=durations, station_id=station_id, now=now
         )
 
-        total_no_of_nozzles = nozzles_of_station_for_connector_type.count()
+        nozzle_list = list(nozzles_of_station_for_connector_type)
+        total_no_of_nozzles = sum(n.vehicle_per_nozzle for n in nozzle_list)
 
         nozzle_slot_map = self.get_nozzles_slot_for_passed_slots(
             nozzle_slot_map=nozzle_slot_map,
@@ -332,6 +365,15 @@ class SlotService:
 
         slots_as_windows = []
 
+        try:
+            slot_breaks = station_operation_break_details_repository.fetch_all_by_station_id(
+                station_id=station_id,
+                now=now,
+                now_in_datetime=to_date(
+                    now))
+        except StationOperationBreakDetails.DoesNotExist as e:
+            LOG.info('No breaks found for station with id {} with exception {}', station_id, e)
+
         for duration in durations:
             nozzle_slot_map[duration] = nozzle_slot_map.get(duration, {})
 
@@ -342,8 +384,9 @@ class SlotService:
                     math.floor((end_hour_time - station_operation_window.start) / duration)
             ):
                 LOG.info("inside duration_slot loop with total no of nozzles: %s" % int(total_no_of_nozzles))
-                nozzle_slot_map[duration][duration_slot] = nozzle_slot_map[duration].get(duration_slot, 0) + \
-                                                           int(total_no_of_nozzles)
+                nozzle_slot_map[duration][duration_slot] = \
+                    nozzle_slot_map[duration].get(duration_slot, 0) + \
+                    int(total_no_of_nozzles)
 
                 if running_window_slot_count != nozzle_slot_map[duration][duration_slot]:
                     if running_window_slot_count == -1:
@@ -356,7 +399,8 @@ class SlotService:
 
                         slots_as_windows = self.get_if_running_window_changes(slots_as_windows,
                                                                               running_window_slot_count, duration_slot,
-                                                                              duration, nozzle_slot_map, slots)
+                                                                              duration, nozzle_slot_map, slots,
+                                                                              total_no_of_nozzles)
                         slots = []
                         running_window_slot_count = nozzle_slot_map[duration][duration_slot]
 
@@ -367,25 +411,17 @@ class SlotService:
                 except Exception:
                     end_time = min_to_time(0)
 
-                try:
-                    slot_breaks = station_operation_break_details_repository.fetch_all_by_station_id(
-                        station_id=station_id,
-                        now=now,
-                        now_in_datetime=to_date(
-                            now))
-                except StationOperationBreakDetails.DoesNotExist as e:
-                    LOG.info('No breaks found for station with id {} with exception {}', station_id, e)
-
                 if not slot_breaks:
-                    self.append_available_slots(slots, start_time, end_time)
+                    self.append_available_slots(slots, start_time, end_time, nozzle_slot_map[duration][duration_slot])
                 else:
                     for slot_break in slot_breaks:
                         if not slot_break.break_start_time <= start_time < slot_break.break_end_time and \
                                 not slot_break.break_start_time < end_time <= slot_break.break_end_time:
-                            self.append_available_slots(slots, start_time, end_time)
+                            self.append_available_slots(slots, start_time, end_time,
+                                                        nozzle_slot_map[duration][duration_slot])
 
             slots_as_windows = self.handle_end_scenario(slots, running_window_slot_count, duration, nozzle_slot_map,
-                                                        slots_as_windows, duration_slot)
+                                                        slots_as_windows, duration_slot, total_no_of_nozzles)
         return slots_as_windows
 
     def get_nozzles_of_station(self, vehicle_id, now, station_id, rated_power_id=None):
@@ -428,7 +464,7 @@ class SlotService:
         }
 
 
-# return overlap range for two range objects or None if no ovelap
+# return overlap range for two range objects or None if no overlap
 # does not handle step!=1
 def range_intersect(r1, r2):
     return range(max(r1.start, r2.start), min(r1.stop, r2.stop)) or None

@@ -18,6 +18,7 @@ class Collection(BaseResource):
     @falcon.before(authorize, [Authorization(Resources.Services, [PermissionScopes.Search])])
     def on_get(self, req, res):
         try:
+            # req.params['type'] = 'amenity,cng'   # cng_delete
             filters = {
                 self.QueryParams.Type.value: req.get_param(self.QueryParams.Type.value).split(",")
             }
@@ -31,12 +32,16 @@ class Collection(BaseResource):
 
             self.on_success(res=res, status_code=falcon.HTTP_OK, body=body)
         except Exception as error:
-            self.on_error(res, error if isinstance(error, AppError) else UnknownError(description='failed to get nearby stations', raw_exception=error))
+            self.on_error(res,
+                          error if isinstance(error,
+                                              AppError) else UnknownError(description='failed to get nearby stations',
+                                                                          raw_exception=error))
 
 
 class ItemIconImage(BaseResource):
 
-    @falcon.before(authorize, [Authorization(resource=Resources.ConfigMasters, permissions=[PermissionScopes.Retrieve])])
+    @falcon.before(authorize,
+                   [Authorization(resource=Resources.ConfigMasters, permissions=[PermissionScopes.Retrieve])])
     def on_get(self, req, res, service_id):
         try:
             service = ServiceMasterService()
@@ -44,4 +49,5 @@ class ItemIconImage(BaseResource):
 
             self.on_image_success(res=res, body=body, content_type=falcon.MEDIA_PNG)
         except Exception as e:
-            self.on_error(res, e if isinstance(e, AppError) else UnknownError(description='failed to get Service Icon', raw_exception=e))
+            self.on_error(res, e if isinstance(e, AppError) else UnknownError(description='failed to get Service Icon',
+                                                                              raw_exception=e))

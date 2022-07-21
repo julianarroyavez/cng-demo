@@ -39,7 +39,7 @@ class JsonParser(object):
 
             elif 'multipart/form-data' in req.content_type:
                 self.capture_json_data(req, req.get_param('data', required=True))
-                if req.params['account-type'] != 'cngvo':
+                if 'account-type' not in req.params or req.params['account-type'] != 'cngvo':
                     try:
                         req.context['file'] = req.get_param('file', required=True).file
                     except Exception:

@@ -15,9 +15,9 @@ from app.domain.resource_schema import Nozzles, Stations, Vehicles, Units, Charg
 class ServiceTypes(enum.Enum):
     ValueAdd = 'VALUE_ADD'
     EvCharge = 'EV_CHARGE'
+    Cng = 'CNG'
     BatteryCharge = 'BATTERY_CHARGE'
     BatterySwap = 'BATTERY_SWAP'
-    Cng = 'CNG'
 
 
 class CancellationRefundDuration(enum.Enum):
@@ -116,6 +116,7 @@ class Slots(BaseModel):
     end_time = TimeField()
     slot_number = CharField(null=True, max_length=15)
     status = CharField(null=True, max_length=15)  # todo: convert to enumfield
+    vacancy = IntegerField()
 
     class Meta:
         schema = schema_constant.transactional

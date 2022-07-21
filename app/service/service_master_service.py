@@ -46,22 +46,25 @@ class ServiceMasterService:
 
     def get_station_services(self, station_id, filters, addons):
         service_rates_repository = ServiceRatesRepository()
-
         types_list = []
         for filter_type_value in filters.get('type', []):
             if filter_type_value == 'value-add':
                 types_list.append(ServiceTypes.ValueAdd)
             elif filter_type_value == 'ev-charge':
                 types_list.append(ServiceTypes.EvCharge)
+            elif filter_type_value == 'cng':
+                types_list.append(ServiceTypes.Cng)
 
         # todo: handle issue when no type filter available
         query_filter_where_condition = (ServiceMasters.type.in_(types_list)) if types_list else True
 
         now = datetime_now()
         # todo: use addons to define joins on query
-        service_rates_of_station_services = service_rates_repository.fetch_all_with_rates_and_power_by_station(now=now,
-                                                                                                               station_id=station_id,
-                                                                                                               query_filter_where_condition=query_filter_where_condition)
+        service_rates_of_station_services = \
+            service_rates_repository.fetch_all_with_rates_and_power_by_station(
+                now=now,
+                station_id=station_id,
+                query_filter_where_condition=query_filter_where_condition)
 
         station_services_dict = {}
 
@@ -76,13 +79,15 @@ class ServiceMasterService:
                     "rates": []
                 })
 
-            station_services_dict[service_rate.service_record.record_id]['ratedPowerDict'][service_rate.consumption_rate_record.rated_power_record.record_id] =  {
-                                "id": service_rate.consumption_rate_record.rated_power_record.record_id,
-                                "power": service_rate.consumption_rate_record.rated_power_record.power,
-                                "power_unit": service_rate.consumption_rate_record.rated_power_record.power_unit.value,
-                                "chargingType": service_rate.consumption_rate_record.rated_power_record.charge_type.value
-                                }
-            station_services_dict[service_rate.service_record.record_id]['ratedPowers'] = list(station_services_dict[service_rate.service_record.record_id]['ratedPowerDict'].values())
+            station_services_dict[service_rate.service_record.record_id]['ratedPowerDict'][
+                service_rate.consumption_rate_record.rated_power_record.record_id] = {
+                "id": service_rate.consumption_rate_record.rated_power_record.record_id,
+                "power": service_rate.consumption_rate_record.rated_power_record.power,
+                "power_unit": service_rate.consumption_rate_record.rated_power_record.power_unit.value,
+                "chargingType": service_rate.consumption_rate_record.rated_power_record.charge_type.value
+            }
+            station_services_dict[service_rate.service_record.record_id]['ratedPowers'] = list(
+                station_services_dict[service_rate.service_record.record_id]['ratedPowerDict'].values())
 
             rate = {
                 "id": service_rate.consumption_rate_record.record_id,
@@ -119,4 +124,3 @@ class ServiceMasterService:
 
         return image.tobytes() if size is None else image_util.transform_image(image.tobytes(),
                                                                                tuple(map(int, size.split(","))))
-
