@@ -1,7 +1,6 @@
 import enum
 import re
 import uuid
-
 from app import log
 from app.constant import slot_constant
 from app.database import db_session
@@ -17,7 +16,7 @@ from app.repository.station_services_repository import StationServicesRepository
 from app.repository.stations_repository import StationsRepository
 from app.repository.verifications_repository import VerificationsRepository
 from app.util import image_util, string_util
-from app.util.datetime_util import datetime_now, to_time
+from app.util.datetime_util import *
 from app.domain.resource_schema import ChargeTypes, Nozzles, RatedPowers
 
 LOG = log.get_logger()
@@ -293,7 +292,7 @@ class StationService:
                 }
             if 'slot-count' in include_params:
                 stations_list[station.record_id]['slotData'] = self.get_slot_count_for_station(
-                    station_id=station.record_id
+                    station_id=station.record_id, slot_date=params['slot-date'] if 'slot-date' in params else None
                 )
                 # {
                 #     "availableSlotCount": 5,
@@ -320,9 +319,10 @@ class StationService:
         stations_list = self.set_station_media_and_connector_type_values(include_params=include_params,
                                                                          stations_list=stations_list)
         response_stations_list = list(stations_list.values())
-        response_stations_list = self.set_charging_type_for_station_values(include_params=include_params,
-                                                                           stations_list=stations_list,
-                                                                           response_stations_list=response_stations_list)
+        response_stations_list = self.set_charging_type_for_station_values(
+            include_params=include_params,
+            stations_list=stations_list,
+            response_stations_list=response_stations_list)
         return {
             "stations": response_stations_list
         }
@@ -429,27 +429,44 @@ class StationService:
                     })
         return response_stations_list
 
-    def get_slot_count_for_station(self, station_id):
-        slot_cursor = db_session.execute_sql(slot_constant.slot_count_for_station % station_id)
-        booking_cursor = db_session.execute_sql(slot_constant.booking_count_by_total_duration_hourly % station_id)
+    @staticmethod
+    def get_slot_count_for_station(station_id, slot_date=None):
+        ist_time = datetime.datetime.now(timezone('UTC')).astimezone(timezone(ist_timezone))
+        query_time = str(ist_time.strftime(time_format_in_hh_mm_ss))
+        current_date = str(ist_time.date())
+        if slot_date is not None and current_date != slot_date:
+            query_time = "00:00:01"
+
+        slot_cursor = db_session.execute_sql(
+            slot_constant.slot_count_for_station % (
+                query_time,
+                query_time,
+                station_id))
+
+        query_date = slot_date if slot_date is not None else current_date
+        booking_cursor = db_session.execute_sql(
+            slot_constant.booking_count_by_total_duration_hourly % (
+                station_id,
+                query_date,
+                query_time))
 
         slot = slot_cursor.fetchone()
 
         booking_count = booking_cursor.fetchone()
 
-        total_slots = slot[0]
-        available_slots = slot[1]
+        total_slots = slot[0] * 2  # todo I am multiply by 2 cause in this first cng release slots are 30 min.
+        available_slots = slot[1] * 2
         if total_slots < available_slots:
             available_slots = 0
         if total_slots == available_slots:
             unavailable_slots = 0
         else:
-            unavailable_slots = total_slots - (available_slots + float(booking_count[0]))
+            unavailable_slots = total_slots - (available_slots + (float(booking_count[0]) * 0.5))
 
         if available_slots < 0:
             available_slots = 0
         LOG.info(f'{total_slots}, {available_slots}, {unavailable_slots}')
         return {
-            "availableSlotCount": available_slots,
-            "unavailableSlotCount": unavailable_slots
+            "availableSlotCount": int(available_slots),
+            "unavailableSlotCount": int(unavailable_slots)
         }
