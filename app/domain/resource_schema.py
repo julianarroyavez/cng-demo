@@ -23,7 +23,7 @@ class Units(enum.Enum):
 class ChargeTypes(enum.Enum):
     SlowCharge = 'SLOW_CHARGE'
     FastCharge = 'FAST_CHARGE'
-    CNG = 'CNG'
+    Cng = 'CNG'
 
 
 

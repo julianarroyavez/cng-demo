@@ -255,7 +255,7 @@ class StationService:
             # for connector in connectors:
             where_clauses.append(Nozzles.charging_connector_record.in_(connectors))
         if 'charging-type' in params:
-            where_clauses.append(RatedPowers.charge_type == ChargeTypes(params['charging-type']))
+            where_clauses.append(RatedPowers.charge_type == ChargeTypes(params['charging-type'].upper()))
 
         stations = stations_repository.fetch_nearby_stations(lat=lat, lon=lon, radius=within_range, unit='K', now=now,
                                                              where_clauses=where_clauses)
@@ -431,7 +431,7 @@ class StationService:
 
     @staticmethod
     def get_slot_count_for_station(station_id, slot_date=None):
-        ist_time = datetime.datetime.now(timezone('UTC')).astimezone(timezone(ist_timezone))
+        ist_time = datetime.datetime.now(timezone('UTC')).astimezone(timezone('Asia/Kolkata')) # todo from station
         query_time = str(ist_time.strftime(time_format_in_hh_mm_ss))
         current_date = str(ist_time.date())
         if slot_date is not None and current_date != slot_date:
