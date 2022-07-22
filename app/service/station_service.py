@@ -458,15 +458,12 @@ class StationService:
         available_slots = slot[1] * 2
         if total_slots < available_slots:
             available_slots = 0
-        if total_slots == available_slots:
-            unavailable_slots = 0
-        else:
-            # unavailable_slots = total_slots - (available_slots + (float(booking_count[0])))
-            unavailable_slots = total_slots - (available_slots - booking_count)
+        unavailable_slots = total_slots - (available_slots - booking_count)
         if available_slots < 0:
             available_slots = 0
         LOG.info(f'{total_slots}, {available_slots}, {unavailable_slots}')
+
         return {
-            "availableSlotCount": int(available_slots),
+            "availableSlotCount": int(total_slots-unavailable_slots),
             "unavailableSlotCount": int(unavailable_slots)
         }
